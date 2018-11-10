@@ -1,0 +1,64 @@
+import requests              #Run all import statements needed
+import pandas as pd 
+import sqlite3 
+import lxml.html
+
+r = requests.get("http://wonderlictestsample.com/nfl-wonderlic-scores/") #Grab the url of the website
+
+html = lxml.html.fromstring(r.text)  #load the url using the lxml.html package
+
+content_table_html = html.get_element_by_id("post-98") #The last id location in the developer inspection
+
+table_body = content_table_html.getchildren()[1].getchildren()[4].getchildren()[0].getchildren()[2]
+
+#Get the children from the original id location and their children until we have the table body
+
+table_body.getchildren()[0].getchildren() #Using get children on the table body shows us 3 elements
+                                          #Considering the table has 3 fields this is what we are looking for
+                                          
+data = {                  #Create a pandas dataframe to load the data from the table 
+    "Player":   [],
+    "Score":    [],
+    "Position": [],
+}
+
+for row in table_body.getchildren()[:] : #Run a for loop to load the data by row into the dataframe
+    data["Player"].append(row.getchildren()[0].text_content()),
+    data["Score"].append(row.getchildren()[1].text_content()),
+    data["Position"].append(row.getchildren()[2].text_content())
+    
+Wonderlic_df = pd.DataFrame(data)  
+
+Wonderlic_df.head()  #Check to make sure the data loaded how we wanted 
+
+db     = sqlite3.connect(":memory:")  #Create the SQLite database
+cursor = db.cursor()
+cursor.execute ("""
+    CREATE TABLE WONDERLIC(PLAYER, SCORE, POSITION)
+""")
+
+for row in Wonderlic_df[Wonderlic_df.Position.isin(["QB" , "LB"])].itertuples():
+    insert_sql_syntax = ("""
+        INSERT INTO WONDERLIC(PLAYER, SCORE, POSITION)  
+        VALUES (?,?,?)
+    """)
+    cursor.execute(insert_sql_syntax, row[1:])   #Load the table into the SQLite database
+    
+
+#db.close()     
+
+for row in cursor.execute("""
+    SELECT PLAYER, SCORE, POSITION
+    FROM WONDERLIC
+    WHERE POSITION = "QB"
+"""):
+    
+    print(row)   #Run a couple test SELECT statements to make sure everything was loaded properly
+    
+for row in cursor.execute("""
+    SELECT PLAYER, SCORE
+    FROM WONDERLIC
+    WHERE SCORE < '25'
+"""):
+    
+    print(row)
